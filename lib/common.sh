@@ -49,18 +49,26 @@ ensure_root() {
 }
 
 # Prompt user for text input with default value
+# Prompts are emitted to stderr so command substitution captures only the entered value.
 prompt_input() {
     local prompt_msg="$1"
     local default_val="${2:-}"
     local user_val=""
 
     if [[ -n "$default_val" ]]; then
-        echo -ne "${COLOR_BOLD}${prompt_msg}${COLOR_RESET} [${COLOR_CYAN}${default_val}${COLOR_RESET}]: "
+        echo -ne "${COLOR_BOLD}${prompt_msg}${COLOR_RESET} [${COLOR_CYAN}${default_val}${COLOR_RESET}]: " >&2
     else
-        echo -ne "${COLOR_BOLD}${prompt_msg}${COLOR_RESET}: "
+        echo -ne "${COLOR_BOLD}${prompt_msg}${COLOR_RESET}: " >&2
     fi
 
-    read -r user_val
+    # Read user input safely without terminating under set -e on EOF
+    if ! IFS= read -r user_val; then
+        user_val="$default_val"
+    fi
+
+    # Strip carriage return (\r) and trim leading/trailing whitespace
+    user_val=$(echo "$user_val" | tr -d '\r' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+
     if [[ -z "$user_val" ]]; then
         echo "$default_val"
     else
@@ -74,8 +82,13 @@ prompt_secret() {
     local secret_val=""
 
     echo -ne "${COLOR_BOLD}${prompt_msg}${COLOR_RESET} (input hidden): " >&2
-    read -r -s secret_val
+    if ! IFS= read -r -s secret_val; then
+        secret_val=""
+    fi
     echo "" >&2
+
+    # Strip carriage return (\r)
+    secret_val=$(echo "$secret_val" | tr -d '\r')
     echo "$secret_val"
 }
 
@@ -85,15 +98,21 @@ prompt_yes_no() {
     local default_choice="${2:-Y}" # Y or N
     local prompt_str="[Y/n]"
     [[ "$default_choice" =~ ^[Nn]$ ]] && prompt_str="[y/N]"
+    local choice=""
 
     while true; do
-        echo -ne "${COLOR_BOLD}${question}${COLOR_RESET} ${COLOR_CYAN}${prompt_str}${COLOR_RESET}: "
-        read -r choice
+        echo -ne "${COLOR_BOLD}${question}${COLOR_RESET} ${COLOR_CYAN}${prompt_str}${COLOR_RESET}: " >&2
+        if ! IFS= read -r choice; then
+            choice="$default_choice"
+        fi
+
+        choice=$(echo "$choice" | tr -d '\r' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
         choice="${choice:-$default_choice}"
+
         case "$choice" in
             [Yy]|[Yy][Ee][Ss]) return 0 ;;
             [Nn]|[Nn][Oo]) return 1 ;;
-            *) echo -e "${COLOR_YELLOW}Please answer yes (y) or no (n).${COLOR_RESET}" ;;
+            *) echo -e "${COLOR_YELLOW}Please answer yes (y) or no (n).${COLOR_RESET}" >&2 ;;
         esac
     done
 }

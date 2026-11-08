@@ -115,6 +115,7 @@ echo ""
 local delete_data=""
 echo -ne "${COLOR_RED}${COLOR_BOLD}Do you want to PERMANENTLY DELETE all persistent data and workflows? Type uppercase 'YES' to confirm${COLOR_RESET}: "
 read -r delete_data
+delete_data=$(echo "$delete_data" | tr -d '\r' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
 
 if [[ "$delete_data" == "YES" ]]; then
     log_warn "Permanently removing persistent data directories..."

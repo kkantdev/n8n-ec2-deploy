@@ -55,17 +55,24 @@ check_os() {
 
     # Supported Ubuntu versions: 20.04, 22.04, 24.04
     case "$version_id" in
-        "22.04"|"24.04"|"20.04")
+        "22.04"*|"24.04"*|"20.04"*)
             log_success "Operating system verified: Ubuntu ${version_id} LTS"
             return 0
             ;;
-        *)
-            log_warn "Detected Ubuntu ${version_id}. The recommended and tested versions are 22.04 LTS or 24.04 LTS."
+        "26.04"*)
+            log_warn "Detected Ubuntu 26.04. The recommended and tested versions are 22.04 LTS or 24.04 LTS."
             if prompt_yes_no "Do you want to proceed anyway?" "N"; then
+                log_info "Continuing installation on Ubuntu ${version_id}."
                 return 0
             else
+                log_info "Installation cancelled by user."
                 return 1
             fi
+            ;;
+        *)
+            log_error "Unsupported Ubuntu version: ${version_id}."
+            log_error "This installer requires Ubuntu 22.04 LTS or 24.04 LTS."
+            return 1
             ;;
     esac
 }
