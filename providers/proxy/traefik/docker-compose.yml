@@ -1,0 +1,30 @@
+services:
+  traefik:
+    image: ${TRAEFIK_IMAGE_NAME:-traefik}:${TRAEFIK_IMAGE_TAG:-v3.2}
+    container_name: n8n-proxy-traefik
+    restart: unless-stopped
+    command:
+      - "--api.insecure=false"
+      - "--providers.file.directory=/etc/traefik/dynamic"
+      - "--providers.file.watch=true"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.le.acme.email=${SSL_EMAIL}"
+      - "--certificatesresolvers.le.acme.storage=/letsencrypt/acme.json"
+      - "--certificatesresolvers.le.acme.httpchallenge=true"
+      - "--certificatesresolvers.le.acme.httpchallenge.entrypoint=web"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./dynamic:/etc/traefik/dynamic:ro
+      - ./letsencrypt:/letsencrypt
+    networks:
+      - n8n-proxy-network
+
+networks:
+  n8n-proxy-network:
+    external: true
+

@@ -1,0 +1,45 @@
+# ==============================================================================
+# Traefik Dynamic Configuration for n8n
+# ==============================================================================
+
+http:
+  routers:
+    n8n-http:
+      rule: "Host(`__DOMAIN_NAME__`)"
+      entryPoints:
+        - "web"
+      middlewares:
+        - "redirect-to-https"
+      service: "n8n-service"
+
+    n8n-secure:
+      rule: "Host(`__DOMAIN_NAME__`)"
+      entryPoints:
+        - "websecure"
+      service: "n8n-service"
+      tls:
+        certResolver: "le"
+
+  middlewares:
+    redirect-to-https:
+      redirectScheme:
+        scheme: "https"
+        permanent: true
+
+    security-headers:
+      headers:
+        stsSeconds: 63072000
+        stsIncludeSubdomains: true
+        stsPreload: true
+        frameDeny: false
+        customFrameOptionsValue: "SAMEORIGIN"
+        contentTypeNosniff: true
+        browserXssFilter: true
+
+  services:
+    n8n-service:
+      loadBalancer:
+        servers:
+          - url: "http://n8n:5678"
+        passHostHeader: true
+

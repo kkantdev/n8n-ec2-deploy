@@ -1,0 +1,29 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.crt
+*.csr
+acme.json
+
+# Persistent runtime data
+data/
+postgres/
+proxy/certbot/
+proxy/traefik/acme.json
+logs/
+
+# Backups and temporary files
+*.bak
+*.backup.*
+*.tmp
+/tmp/
+
+# OS and Editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
