@@ -3,14 +3,33 @@
 # System & Pre-flight Environment Checks
 # ==============================================================================
 
-# Source libraries
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=/dev/null
-source "${SCRIPT_DIR}/../config/defaults.sh"
-# shellcheck source=/dev/null
-source "${SCRIPT_DIR}/common.sh"
-# shellcheck source=/dev/null
-source "${SCRIPT_DIR}/validation.sh"
+# Ensure directory context
+if [[ -z "${PROJECT_ROOT:-}" || -z "${LIB_DIR:-}" ]]; then
+    _DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    PROJECT_ROOT="${PROJECT_ROOT:-$(cd "${_DIR}/.." && pwd)}"
+    export PROJECT_ROOT
+    LIB_DIR="${LIB_DIR:-${PROJECT_ROOT}/lib}"
+    export LIB_DIR
+    CONFIG_DIR="${CONFIG_DIR:-${PROJECT_ROOT}/config}"
+    export CONFIG_DIR
+    unset _DIR
+fi
+
+if ! declare -f load_lib >/dev/null 2>&1; then
+    load_lib() {
+        local file_path="$1"
+        if [[ ! -f "$file_path" ]]; then
+            echo -e "\033[31m[✖ ERROR]\033[0m Required library file not found: ${file_path}" >&2
+            exit 1
+        fi
+        # shellcheck source=/dev/null
+        source "$file_path"
+    }
+fi
+
+load_lib "${CONFIG_DIR}/defaults.sh"
+load_lib "${LIB_DIR}/common.sh"
+load_lib "${LIB_DIR}/validation.sh"
 
 # Verify Ubuntu OS distribution & supported release version
 check_os() {
@@ -243,4 +262,3 @@ run_system_checks() {
 
     return 0
 }
-

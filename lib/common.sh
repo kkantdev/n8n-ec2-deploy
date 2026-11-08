@@ -5,9 +5,12 @@
 
 # Source colors if not already defined
 if [[ -z "${COLOR_RESET:-}" ]]; then
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    # shellcheck source=/dev/null
-    source "${SCRIPT_DIR}/colors.sh"
+    _LIB_DIR="${LIB_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+    if [[ -f "${_LIB_DIR}/colors.sh" ]]; then
+        # shellcheck source=/dev/null
+        source "${_LIB_DIR}/colors.sh"
+    fi
+    unset _LIB_DIR
 fi
 
 # Loggers
@@ -106,4 +109,3 @@ cleanup_temp_files() {
 setup_interrupt_trap() {
     trap 'echo ""; log_warn "Operation interrupted by user. Exiting..."; cleanup_temp_files; exit 130' INT TERM
 }
-

@@ -5,36 +5,84 @@
 
 set -euo pipefail
 
-# Determine script directory
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# ------------------------------------------------------------------------------
+# Project Directory Resolution & Path Normalization
+# ------------------------------------------------------------------------------
+# Resolve real directory of this script, handling symlinks and sudo execution
+if [[ -n "${BASH_SOURCE[0]:-}" && "${BASH_SOURCE[0]}" != "bash" && "${BASH_SOURCE[0]}" != "-bash" && -e "${BASH_SOURCE[0]}" ]]; then
+    SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")"
+    SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
+else
+    # Piped from stdin or curl invocation
+    SCRIPT_DIR="$(pwd)"
+fi
 
-# Source all configuration and core libraries
-# shellcheck source=/dev/null
-source "${SCRIPT_DIR}/config/defaults.sh"
-# shellcheck source=/dev/null
-source "${SCRIPT_DIR}/lib/colors.sh"
-# shellcheck source=/dev/null
-source "${SCRIPT_DIR}/lib/common.sh"
-# shellcheck source=/dev/null
-source "${SCRIPT_DIR}/lib/validation.sh"
-# shellcheck source=/dev/null
-source "${SCRIPT_DIR}/lib/system-checks.sh"
-# shellcheck source=/dev/null
-source "${SCRIPT_DIR}/lib/docker.sh"
-# shellcheck source=/dev/null
-source "${SCRIPT_DIR}/lib/secrets.sh"
-# shellcheck source=/dev/null
-source "${SCRIPT_DIR}/lib/environment.sh"
-# shellcheck source=/dev/null
-source "${SCRIPT_DIR}/lib/database.sh"
-# shellcheck source=/dev/null
-source "${SCRIPT_DIR}/lib/compose-generator.sh"
-# shellcheck source=/dev/null
-source "${SCRIPT_DIR}/lib/deployment.sh"
-# shellcheck source=/dev/null
-source "${SCRIPT_DIR}/lib/health-check.sh"
-# shellcheck source=/dev/null
-source "${SCRIPT_DIR}/providers/proxy/provider-interface.sh"
+PROJECT_ROOT="${PROJECT_ROOT:-$SCRIPT_DIR}"
+export PROJECT_ROOT
+
+# Support for curl-pipe bootstrap execution (if running without full repo cloned locally)
+if [[ ! -f "${PROJECT_ROOT}/lib/common.sh" ]]; then
+    if [[ -f "./lib/common.sh" ]]; then
+        PROJECT_ROOT="$(pwd)"
+    elif [[ -f "./n8n-ec2-deploy/lib/common.sh" ]]; then
+        PROJECT_ROOT="$(pwd)/n8n-ec2-deploy"
+    else
+        BOOTSTRAP_TARGET="${BOOTSTRAP_DIR:-/opt/n8n-ec2-deploy-src}"
+        echo "[INFO] Full repository not detected locally. Bootstrapping repository to ${BOOTSTRAP_TARGET}..."
+        mkdir -p "$(dirname "$BOOTSTRAP_TARGET")"
+        if command -v git >/dev/null 2>&1; then
+            if [[ -d "${BOOTSTRAP_TARGET}/.git" ]]; then
+                git -C "$BOOTSTRAP_TARGET" pull --quiet || true
+            else
+                git clone --depth 1 "${REPO_URL:-https://github.com/n8n-io/n8n-ec2-deploy.git}" "$BOOTSTRAP_TARGET" || {
+                    echo "[ERROR] Failed to clone installer repository. Please clone manually and run install.sh." >&2
+                    exit 1
+                }
+            fi
+            PROJECT_ROOT="$BOOTSTRAP_TARGET"
+        else
+            echo "[ERROR] 'git' is required for curl bootstrap installation. Please install git or clone repository." >&2
+            exit 1
+        fi
+    fi
+fi
+
+# Canonical subdirectories
+LIB_DIR="${LIB_DIR:-${PROJECT_ROOT}/lib}"
+export LIB_DIR
+CONFIG_DIR="${CONFIG_DIR:-${PROJECT_ROOT}/config}"
+export CONFIG_DIR
+PROVIDERS_DIR="${PROVIDERS_DIR:-${PROJECT_ROOT}/providers}"
+export PROVIDERS_DIR
+TEMPLATES_DIR="${TEMPLATES_DIR:-${PROJECT_ROOT}/templates}"
+export TEMPLATES_DIR
+
+# Robust library loader with existence checking
+load_lib() {
+    local lib_file="$1"
+    if [[ ! -f "$lib_file" ]]; then
+        echo -e "\033[31m[✖ ERROR]\033[0m Required library file not found: ${lib_file}" >&2
+        echo -e "Please ensure all repository files are present under ${PROJECT_ROOT}." >&2
+        exit 1
+    fi
+    # shellcheck source=/dev/null
+    source "$lib_file"
+}
+
+# Source all configuration and core libraries via canonical LIB_DIR
+load_lib "${CONFIG_DIR}/defaults.sh"
+load_lib "${LIB_DIR}/colors.sh"
+load_lib "${LIB_DIR}/common.sh"
+load_lib "${LIB_DIR}/validation.sh"
+load_lib "${LIB_DIR}/system-checks.sh"
+load_lib "${LIB_DIR}/docker.sh"
+load_lib "${LIB_DIR}/secrets.sh"
+load_lib "${LIB_DIR}/environment.sh"
+load_lib "${LIB_DIR}/database.sh"
+load_lib "${LIB_DIR}/compose-generator.sh"
+load_lib "${LIB_DIR}/deployment.sh"
+load_lib "${LIB_DIR}/health-check.sh"
+load_lib "${PROVIDERS_DIR}/proxy/provider-interface.sh"
 
 # Trap interruptions gracefully
 setup_interrupt_trap
@@ -73,8 +121,8 @@ check_existing_deployment() {
             1)
                 if [[ -x "${target_dir}/manage.sh" ]]; then
                     exec "${target_dir}/manage.sh"
-                elif [[ -x "${SCRIPT_DIR}/manage.sh" ]]; then
-                    exec "${SCRIPT_DIR}/manage.sh"
+                elif [[ -x "${PROJECT_ROOT}/manage.sh" ]]; then
+                    exec "${PROJECT_ROOT}/manage.sh"
                 else
                     log_error "Management script not found. Exiting."
                     exit 1
@@ -275,4 +323,3 @@ main() {
 }
 
 main "$@"
-

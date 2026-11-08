@@ -3,16 +3,38 @@
 # Traefik Proxy Configuration & Validation Logic
 # ==============================================================================
 
-# Source libraries
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=/dev/null
-source "${SCRIPT_DIR}/../../../config/defaults.sh"
-# shellcheck source=/dev/null
-source "${SCRIPT_DIR}/../../../lib/common.sh"
-# shellcheck source=/dev/null
-source "${SCRIPT_DIR}/../../../lib/validation.sh"
-# shellcheck source=/dev/null
-source "${SCRIPT_DIR}/../../../lib/system-checks.sh"
+# Ensure directory context
+if [[ -z "${PROJECT_ROOT:-}" || -z "${LIB_DIR:-}" ]]; then
+    _DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    PROJECT_ROOT="${PROJECT_ROOT:-$(cd "${_DIR}/../../.." && pwd)}"
+    export PROJECT_ROOT
+    LIB_DIR="${LIB_DIR:-${PROJECT_ROOT}/lib}"
+    export LIB_DIR
+    CONFIG_DIR="${CONFIG_DIR:-${PROJECT_ROOT}/config}"
+    export CONFIG_DIR
+    PROVIDERS_DIR="${PROVIDERS_DIR:-${PROJECT_ROOT}/providers}"
+    export PROVIDERS_DIR
+    TEMPLATES_DIR="${TEMPLATES_DIR:-${PROJECT_ROOT}/templates}"
+    export TEMPLATES_DIR
+    unset _DIR
+fi
+
+if ! declare -f load_lib >/dev/null 2>&1; then
+    load_lib() {
+        local file_path="$1"
+        if [[ ! -f "$file_path" ]]; then
+            echo -e "\033[31m[✖ ERROR]\033[0m Required library file not found: ${file_path}" >&2
+            exit 1
+        fi
+        # shellcheck source=/dev/null
+        source "$file_path"
+    }
+fi
+
+load_lib "${CONFIG_DIR}/defaults.sh"
+load_lib "${LIB_DIR}/common.sh"
+load_lib "${LIB_DIR}/validation.sh"
+load_lib "${LIB_DIR}/system-checks.sh"
 
 traefik_validate_prerequisites() {
     log_step "Checking port availability for Traefik (ports 80 and 443)..."
@@ -115,11 +137,11 @@ traefik_generate_config() {
     chmod 600 "${letsencrypt_dir}/acme.json"
 
     # Copy docker-compose.yml for Traefik
-    local compose_src="${SCRIPT_DIR}/docker-compose.yml"
+    local compose_src="${PROVIDERS_DIR}/proxy/traefik/docker-compose.yml"
     cp "$compose_src" "${proxy_dir}/docker-compose.yml"
 
     # Process dynamic.yml template
-    local template_file="${SCRIPT_DIR}/../../../templates/traefik/dynamic.yml"
+    local template_file="${TEMPLATES_DIR}/traefik/dynamic.yml"
     local target_dynamic="${dynamic_dir}/n8n.yml"
 
     sed "s/__DOMAIN_NAME__/${DEPLOY_DOMAIN}/g" "$template_file" > "$target_dynamic"
@@ -127,4 +149,3 @@ traefik_generate_config() {
     log_success "Traefik configuration files generated in: ${proxy_dir}"
     return 0
 }
-

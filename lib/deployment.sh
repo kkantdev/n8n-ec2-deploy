@@ -3,16 +3,38 @@
 # Deployment Orchestrator & Directory Setup
 # ==============================================================================
 
-# Source libraries
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=/dev/null
-source "${SCRIPT_DIR}/../config/defaults.sh"
-# shellcheck source=/dev/null
-source "${SCRIPT_DIR}/common.sh"
-# shellcheck source=/dev/null
-source "${SCRIPT_DIR}/environment.sh"
-# shellcheck source=/dev/null
-source "${SCRIPT_DIR}/compose-generator.sh"
+# Ensure directory context
+if [[ -z "${PROJECT_ROOT:-}" || -z "${LIB_DIR:-}" ]]; then
+    _DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    PROJECT_ROOT="${PROJECT_ROOT:-$(cd "${_DIR}/.." && pwd)}"
+    export PROJECT_ROOT
+    LIB_DIR="${LIB_DIR:-${PROJECT_ROOT}/lib}"
+    export LIB_DIR
+    CONFIG_DIR="${CONFIG_DIR:-${PROJECT_ROOT}/config}"
+    export CONFIG_DIR
+    PROVIDERS_DIR="${PROVIDERS_DIR:-${PROJECT_ROOT}/providers}"
+    export PROVIDERS_DIR
+    TEMPLATES_DIR="${TEMPLATES_DIR:-${PROJECT_ROOT}/templates}"
+    export TEMPLATES_DIR
+    unset _DIR
+fi
+
+if ! declare -f load_lib >/dev/null 2>&1; then
+    load_lib() {
+        local file_path="$1"
+        if [[ ! -f "$file_path" ]]; then
+            echo -e "\033[31m[✖ ERROR]\033[0m Required library file not found: ${file_path}" >&2
+            exit 1
+        fi
+        # shellcheck source=/dev/null
+        source "$file_path"
+    }
+fi
+
+load_lib "${CONFIG_DIR}/defaults.sh"
+load_lib "${LIB_DIR}/common.sh"
+load_lib "${LIB_DIR}/environment.sh"
+load_lib "${LIB_DIR}/compose-generator.sh"
 
 prepare_deployment_directories() {
     local target_dir="${1:-$INSTALL_DIR}"
@@ -147,7 +169,7 @@ EOF
 
 install_management_utilities() {
     local target_dir="${1:-$INSTALL_DIR}"
-    local project_root="${SCRIPT_DIR}/.."
+    local project_root="${PROJECT_ROOT}"
 
     log_step "Installing operational management utilities..."
 
@@ -160,11 +182,10 @@ install_management_utilities() {
 
     # Also copy lib, config, providers, and templates directories so manage.sh is fully standalone!
     mkdir -p "${target_dir}/.installer"
-    cp -r "${project_root}/lib" "${target_dir}/.installer/"
-    cp -r "${project_root}/config" "${target_dir}/.installer/"
-    cp -r "${project_root}/providers" "${target_dir}/.installer/"
-    cp -r "${project_root}/templates" "${target_dir}/.installer/"
+    cp -r "${LIB_DIR}" "${target_dir}/.installer/"
+    cp -r "${CONFIG_DIR}" "${target_dir}/.installer/"
+    cp -r "${PROVIDERS_DIR}" "${target_dir}/.installer/"
+    cp -r "${TEMPLATES_DIR}" "${target_dir}/.installer/"
 
     generate_deployment_readme "$target_dir"
 }
-

@@ -5,36 +5,62 @@
 
 set -euo pipefail
 
+# ------------------------------------------------------------------------------
+# Path & Directory Resolution
+# ------------------------------------------------------------------------------
 # Determine operational directory
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-# Resolve installation root and library directory
-if [[ -f "${SCRIPT_DIR}/.env" ]]; then
-    INSTALL_DIR="${SCRIPT_DIR}"
-    if [[ -d "${SCRIPT_DIR}/.installer/lib" ]]; then
-        LIB_DIR="${SCRIPT_DIR}/.installer/lib"
-        CONFIG_DIR="${SCRIPT_DIR}/.installer/config"
-    else
-        LIB_DIR="${SCRIPT_DIR}/lib"
-        CONFIG_DIR="${SCRIPT_DIR}/config"
-    fi
+if [[ -n "${BASH_SOURCE[0]:-}" && "${BASH_SOURCE[0]}" != "bash" && "${BASH_SOURCE[0]}" != "-bash" && -e "${BASH_SOURCE[0]}" ]]; then
+    SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")"
+    SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
 else
-    INSTALL_DIR="${INSTALL_DIR:-/opt/applications/n8n}"
-    LIB_DIR="${SCRIPT_DIR}/lib"
-    CONFIG_DIR="${SCRIPT_DIR}/config"
+    SCRIPT_DIR="$(pwd)"
 fi
 
+# Detect whether running from repo or installed /opt/applications/n8n/
+if [[ -d "${SCRIPT_DIR}/lib" ]]; then
+    PROJECT_ROOT="${SCRIPT_DIR}"
+elif [[ -d "${SCRIPT_DIR}/.installer/lib" ]]; then
+    PROJECT_ROOT="${SCRIPT_DIR}/.installer"
+else
+    PROJECT_ROOT="${PROJECT_ROOT:-${SCRIPT_DIR}}"
+fi
+
+export PROJECT_ROOT
+LIB_DIR="${LIB_DIR:-${PROJECT_ROOT}/lib}"
+export LIB_DIR
+CONFIG_DIR="${CONFIG_DIR:-${PROJECT_ROOT}/config}"
+export CONFIG_DIR
+PROVIDERS_DIR="${PROVIDERS_DIR:-${PROJECT_ROOT}/providers}"
+export PROVIDERS_DIR
+TEMPLATES_DIR="${TEMPLATES_DIR:-${PROJECT_ROOT}/templates}"
+export TEMPLATES_DIR
+
+# Determine deployment installation directory
+if [[ -f "${SCRIPT_DIR}/.env" ]]; then
+    INSTALL_DIR="${SCRIPT_DIR}"
+else
+    INSTALL_DIR="${INSTALL_DIR:-/opt/applications/n8n}"
+fi
+export INSTALL_DIR
+
+# Robust library loader with existence checking
+load_lib() {
+    local lib_file="$1"
+    if [[ ! -f "$lib_file" ]]; then
+        echo -e "\033[31m[✖ ERROR]\033[0m Required library file not found: ${lib_file}" >&2
+        echo -e "Please ensure all repository files are present under ${PROJECT_ROOT}." >&2
+        exit 1
+    fi
+    # shellcheck source=/dev/null
+    source "$lib_file"
+}
+
 # Source libraries
-# shellcheck source=/dev/null
-source "${CONFIG_DIR}/defaults.sh"
-# shellcheck source=/dev/null
-source "${LIB_DIR}/colors.sh"
-# shellcheck source=/dev/null
-source "${LIB_DIR}/common.sh"
-# shellcheck source=/dev/null
-source "${LIB_DIR}/environment.sh"
-# shellcheck source=/dev/null
-source "${LIB_DIR}/health-check.sh"
+load_lib "${CONFIG_DIR}/defaults.sh"
+load_lib "${LIB_DIR}/colors.sh"
+load_lib "${LIB_DIR}/common.sh"
+load_lib "${LIB_DIR}/environment.sh"
+load_lib "${LIB_DIR}/health-check.sh"
 
 ensure_root
 
@@ -237,7 +263,7 @@ update_action() {
 uninstall_action() {
     local uninstall_script="${INSTALL_DIR}/uninstall.sh"
     if [[ ! -x "$uninstall_script" ]]; then
-        uninstall_script="${SCRIPT_DIR}/uninstall.sh"
+        uninstall_script="${PROJECT_ROOT}/uninstall.sh"
     fi
 
     if [[ -x "$uninstall_script" ]]; then
@@ -302,4 +328,3 @@ if [[ $# -gt 0 ]]; then
 else
     show_menu
 fi
-
